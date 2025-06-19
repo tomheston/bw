@@ -13,7 +13,7 @@ async function makeTradierRequest(endpoint, params) {
     if (!TRADIER_TOKEN) {
         throw new Error("Tradier token is not configured on the server.");
     }
-    const url = `<span class="math-inline">\{BASE\_URL\}</span>{endpoint}?${new URLSearchParams(params).toString()}`;
+    const url = `${BASE_URL}${endpoint}?${new URLSearchParams(params).toString()}`;
     console.log(`Fetching from: ${url}`); // For debugging in Vercel logs
     const response = await fetch(url, { headers: HEADERS });
     if (!response.ok) {
