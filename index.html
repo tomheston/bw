@@ -1,1 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drawdown Check + VIX Circuit-Breaker</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        h1, h2 { color: #0056b3; }
+        pre { background-color: #eee; padding: 10px; border-radius: 5px; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; background-color: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #007bff; color: white; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        .error { color: red; font-weight: bold; }
+        .loading { text-align: center; font-style: italic; color: #666; }
+        #results { margin-top: 20px; }
+        .summary-row td { font-weight: bold; background-color: #e9ecef; }
+        .separator-row td { border-top: 2px solid #000; padding: 5px 8px; background-color: transparent !important; }
 
+    </style>
+</head>
+<body>
+    <h1>Drawdown Check + VIX Circuit-Breaker</h1>
+    <div id="loading" class="loading">Loading data... This may take a moment due to API calls.</div>
+    <div id="error" class="error" style="display: none;"></div>
+    <div id="results">
+        </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
