@@ -50,8 +50,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } else if (isSummaryRow) {
                     tableHtml += `<tr class="summary-row">`;
                     tableHtml += `<td>${row[0]}</td>`; // "SUMMED AVG RETURN"
-                    tableHtml += `<td colspan="<span class="math-inline">\{headers\.length \- 1\}"\></span>{row[1]}</td>`; // The average value
+                    tableHtml += `<td colspan="${headers.length - 1}">${row[1]}</td>`; // The average value
                     tableHtml += `</tr>`;
+                }
                 } else {
                     tableHtml += `<tr>`;
                     row.forEach(cell => {
