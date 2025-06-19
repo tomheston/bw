@@ -11,15 +11,22 @@
         table { width: 100%; border-collapse: collapse; margin-bottom: 20px; background-color: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #007bff; color: white; }
-        tr:nth-child(even) { background-color: #f2f2f2; }
+        /* Keep this for alternating colors, but it will be overridden by .works-yes-row below */
+        tr:nth-child(even) { background-color: #f2f2f2; } 
+
         .error { color: red; font-weight: bold; }
         .loading { text-align: center; font-style: italic; color: #666; }
         #results { margin-top: 20px; }
         .summary-row td { font-weight: bold; background-color: #e9ecef; }
         .separator-row td { border-top: 2px solid #000; padding: 5px 8px; background-color: transparent !important; }
-        /* NEW CSS FOR HIGHLIGHTING */
-        .works-yes-row {
-            background-color: #e6ffe6; !important; /* Light green */
+
+        /* STRONGER CSS FOR HIGHLIGHTING */
+        /* Apply highlight to both odd and even rows with the class */
+        tr.works-yes-row,
+        tr.works-yes-row:nth-child(even), /* Specifically target even rows with the class */
+        tr.works-yes-row:nth-child(odd) {  /* Specifically target odd rows with the class */
+            background-color: #e6ffe6 !important; /* Light green, always overrides */
+        }
     </style>
 </head>
 <body>
@@ -27,7 +34,8 @@
     <div id="loading" class="loading">Loading data... This may take a moment due to API calls.</div>
     <div id="error" class="error" style="display: none;"></div>
     <div id="results">
-        </div>
+        <!-- Results will be injected here by JavaScript -->
+    </div>
 
     <script src="script.js"></script>
 </body>
