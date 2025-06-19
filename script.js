@@ -66,9 +66,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         let htmlContent = `
-            <p><strong>${data.vixStatus}</strong></p>
             <p><strong>Run Date (PT):</strong> ${data.runDate}</p>
-            <p><strong>Capital allocation:</strong> equal weight</p>
+            <p><strong>${data.vixStatus}</strong></p>            
         `;
 
         // Add Drawdown Table
