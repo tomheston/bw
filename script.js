@@ -3,6 +3,48 @@ document.addEventListener('DOMContentLoaded', async () => {
     const errorDiv = document.getElementById('error');
     const resultsDiv = document.getElementById('results');
 
+    // Function to generate tables - DEFINED HERE FOR PROPER SCOPE
+    function createTableHtml(title, tableData, headers) {
+        if (!tableData || tableData.length === 0) {
+            return `<h2>${title}</h2><p>No data available.</p>`;
+        }
+
+        let tableHtml = `<h2>${title}</h2><table><thead><tr>`;
+        headers.forEach(header => {
+            tableHtml += `<th>${header}</th>`;
+        });
+        tableHtml += `</tr></thead><tbody>`;
+
+        tableData.forEach(row => {
+            const isSummaryRow = row[0] === 'SUMMED AVG RETURN';
+            const isSeparatorRow = row[0] && row[0].startsWith('---');
+
+            // Determine if this row should be highlighted
+            // The "Works" column is the last element (index 9) in the data array for actual rows
+            const shouldHighlight = !isSummaryRow && !isSeparatorRow && row[9] === 'Yes';
+            const rowClass = shouldHighlight ? 'works-yes-row' : ''; // Add the class if needed
+
+            if (isSeparatorRow) {
+                tableHtml += `<tr class="separator-row"><td colspan="${headers.length}"></td></tr>`;
+            } else if (isSummaryRow) {
+                tableHtml += `<tr class="summary-row">`;
+                tableHtml += `<td>${row[0]}</td>`; // "SUMMED AVG RETURN"
+                // THIS LINE IS CRUCIAL: It must be purely template literal syntax, no math-inline span tags
+                tableHtml += `<td colspan="${headers.length - 1}">${row[1]}</td>`; // The average value
+                tableHtml += `</tr>`;
+            } else {
+                tableHtml += `<tr class="${rowClass}">`; // Apply the class here
+                row.forEach(cell => {
+                    tableHtml += `<td>${cell}</td>`;
+                });
+                tableHtml += `</tr>`;
+            }
+        });
+        tableHtml += `</tbody></table>`;
+        return tableHtml;
+    }
+
+
     try {
         // Make a request to your Vercel serverless function
         // In development, this might be http://localhost:3000/api/tradier
@@ -29,40 +71,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             <p><strong>Capital allocation:</strong> equal weight</p>
         `;
 
-// Function to generate tables
-function createTableHtml(title, tableData, headers) {
-    if (!tableData || tableData.length === 0) {
-        return `<h2>${title}</h2><p>No data available.</p>`;
-    }
-
-    let tableHtml = `<h2>${title}</h2><table><thead><tr>`;
-    headers.forEach(header => {
-        tableHtml += `<th>${header}</th>`;
-    });
-    tableHtml += `</tr></thead><tbody>`;
-
-    tableData.forEach(row => {
-        const isSummaryRow = row[0] === 'SUMMED AVG RETURN';
-        const isSeparatorRow = row[0] && row[0].startsWith('---');
-
-        if (isSeparatorRow) {
-            tableHtml += `<tr class="separator-row"><td colspan="${headers.length}"></td></tr>`;
-        } else if (isSummaryRow) {
-            tableHtml += `<tr class="summary-row">`;
-            tableHtml += `<td>${row[0]}</td>`; // "SUMMED AVG RETURN"
-            tableHtml += `<td colspan="${headers.length - 1}">${row[1]}</td>`; // The average value
-            tableHtml += `</tr>`;
-        } else { // <--- This 'else' correctly follows the 'if/else if' chain
-            tableHtml += `<tr>`;
-            row.forEach(cell => {
-                tableHtml += `<td>${cell}</td>`;
-            });
-            tableHtml += `</tr>`;
-        } // <--- This closing curly brace now correctly closes the 'else' block
-    });
-    tableHtml += `</tbody></table>`;
-    return tableHtml;
-}
         // Add Drawdown Table
         htmlContent += createTableHtml(
             "== BW Ticker Drawdown Check ==",
