@@ -29,42 +29,40 @@ document.addEventListener('DOMContentLoaded', async () => {
             <p><strong>Capital allocation:</strong> equal weight</p>
         `;
 
-        // Function to generate tables
-        function createTableHtml(title, tableData, headers) {
-            if (!tableData || tableData.length === 0) {
-                return `<h2>${title}</h2><p>No data available.</p>`;
-            }
+// Function to generate tables
+function createTableHtml(title, tableData, headers) {
+    if (!tableData || tableData.length === 0) {
+        return `<h2>${title}</h2><p>No data available.</p>`;
+    }
 
-            let tableHtml = `<h2>${title}</h2><table><thead><tr>`;
-            headers.forEach(header => {
-                tableHtml += `<th>${header}</th>`;
+    let tableHtml = `<h2>${title}</h2><table><thead><tr>`;
+    headers.forEach(header => {
+        tableHtml += `<th>${header}</th>`;
+    });
+    tableHtml += `</tr></thead><tbody>`;
+
+    tableData.forEach(row => {
+        const isSummaryRow = row[0] === 'SUMMED AVG RETURN';
+        const isSeparatorRow = row[0] && row[0].startsWith('---');
+
+        if (isSeparatorRow) {
+            tableHtml += `<tr class="separator-row"><td colspan="${headers.length}"></td></tr>`;
+        } else if (isSummaryRow) {
+            tableHtml += `<tr class="summary-row">`;
+            tableHtml += `<td>${row[0]}</td>`; // "SUMMED AVG RETURN"
+            tableHtml += `<td colspan="${headers.length - 1}">${row[1]}</td>`; // The average value
+            tableHtml += `</tr>`;
+        } else { // <--- This 'else' correctly follows the 'if/else if' chain
+            tableHtml += `<tr>`;
+            row.forEach(cell => {
+                tableHtml += `<td>${cell}</td>`;
             });
-            tableHtml += `</tr></thead><tbody>`;
-
-            tableData.forEach(row => {
-                const isSummaryRow = row[0] === 'SUMMED AVG RETURN';
-                const isSeparatorRow = row[0] && row[0].startsWith('---');
-
-                if (isSeparatorRow) {
-                    tableHtml += `<tr class="separator-row"><td colspan="${headers.length}"></td></tr>`;
-                } else if (isSummaryRow) {
-                    tableHtml += `<tr class="summary-row">`;
-                    tableHtml += `<td>${row[0]}</td>`; // "SUMMED AVG RETURN"
-                    tableHtml += `<td colspan="${headers.length - 1}">${row[1]}</td>`; // The average value
-                    tableHtml += `</tr>`;
-                }
-                } else {
-                    tableHtml += `<tr>`;
-                    row.forEach(cell => {
-                        tableHtml += `<td>${cell}</td>`;
-                    });
-                    tableHtml += `</tr>`;
-                }
-            });
-            tableHtml += `</tbody></table>`;
-            return tableHtml;
-        }
-
+            tableHtml += `</tr>`;
+        } // <--- This closing curly brace now correctly closes the 'else' block
+    });
+    tableHtml += `</tbody></table>`;
+    return tableHtml;
+}
         // Add Drawdown Table
         htmlContent += createTableHtml(
             "== BW Ticker Drawdown Check ==",
