@@ -213,7 +213,7 @@ export default async function handler(req, res) {
     }
 
     // --- Original Python Config ---
-    const TICKERS = ['BITX', 'MSTX', 'PLTR', 'SOXL', 'SPXL'];
+    const TICKERS = ['BITX', 'FAS', 'MSTX', 'PLTR', 'SOXL', 'SPXL', 'TNA'];
 
     try {
         // --- VIX circuit-breaker (run FIRST) ------------------------
