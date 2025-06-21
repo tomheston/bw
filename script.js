@@ -53,11 +53,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             <p><strong>${data.vixStatus}</strong></p>
         `;
 
-        // Drawdown Table with backend-provided RawHigh and 12W SMA-High
+        // Prepare drawdown rows with smoothed 12W SMA-High
+        const drawRows = (data.drawdownTable || []).map(row => {
+            const [ticker, currStr, rawHighStr, drawStr, status] = row;
+            const curr = parseFloat(currStr);
+            const drawPct = parseFloat(drawStr.replace('%', '')) / 100;
+            const smaHigh = (curr / (1 - drawPct)).toFixed(2);
+            return [ticker, currStr, rawHighStr, smaHigh, drawStr, status];
+        });
+
         htmlContent += createTableHtml(
             'BW Ticker Drawdown Check',
-            data.drawdownTable,
-            ['Ticker','Current','RawHigh','12W SMA-High','Drawdown%','Status']
+            drawRows,
+            ['Ticker', 'Current', 'RawHigh', '12W SMA-High', 'Drawdown%', 'Status']
         );
 
         // Option tables headers
