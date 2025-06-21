@@ -4,7 +4,7 @@ import { URLSearchParams } from 'url'; // Node.js built-in module for URL parame
 const TRADIER_TOKEN = process.env.TRADIER_TOKEN; // Accessed from Vercel's env variables
 const BASE_URL = 'https://api.tradier.com/v1';
 const HEADERS = {
-    'Authorization': Bearer ${TRADIER_TOKEN},
+    'Authorization': `Bearer ${TRADIER_TOKEN}`,
     'Accept': 'application/json'
 };
 
@@ -13,12 +13,12 @@ async function makeTradierRequest(endpoint, params) {
     if (!TRADIER_TOKEN) {
         throw new Error("Tradier token is not configured on the server.");
     }
-    const url = ${BASE_URL}${endpoint}?${new URLSearchParams(params).toString()};
-    console.log(Fetching from: ${url}); // For debugging in Vercel logs
+    const url = `${BASE_URL}${endpoint}?${new URLSearchParams(params).toString()}`;
+    console.log(`Fetching from: ${url}`); // For debugging in Vercel logs
     const response = await fetch(url, { headers: HEADERS });
     if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(Tradier API error: ${response.status} - ${response.statusText} - ${errorText});
+        throw new Error(`Tradier API error: ${response.status} - ${response.statusText} - ${errorText}`);
     }
     const data = await response.json();
     await new Promise(resolve => setTimeout(resolve, 100)); // Simulate time.sleep(0.1)
@@ -104,11 +104,11 @@ async function getDrawdown(ticker) {
             parseFloat(currentPrice.toFixed(2)),
             parseFloat(rawHigh.toFixed(2)),
             parseFloat(smoothedHigh.toFixed(2)),
-            ${drawdown.toFixed(2)}%,
+            `${drawdown.toFixed(2)}%`,
             status
         ];
     } catch (error) {
-        console.error(Error getting drawdown for ${ticker}:, error);
+        console.error(`Error getting drawdown for ${ticker}:`, error);
         return [ticker, 'ERROR', '-', '-', '-', error.message];
     }
 }
@@ -155,7 +155,7 @@ function parseCallRow(c, spot, tkr) {
     const assignedGain = ((strike + premium - spot) / spot) * 100;
     const bw = spot - premium;
     const pctMoneyness = ((strike / spot) - 1) * 100;
-    const pctMStr = ${pctMoneyness.toFixed(1)}%;
+    const pctMStr = `${pctMoneyness.toFixed(1)}%`;
 
     const meets = (
         (strike > spot && cashYield >= 2.0) ||
@@ -165,7 +165,7 @@ function parseCallRow(c, spot, tkr) {
     return [
         c.expiration_date, tkr, parseFloat(spot.toFixed(2)), strike,
         parseFloat(premium.toFixed(2)), pctMStr, parseFloat(bw.toFixed(2)),
-        ${cashYield.toFixed(1)}%, ${assignedGain.toFixed(1)}%, meets
+        `${cashYield.toFixed(1)}%`, `${assignedGain.toFixed(1)}%`, meets
     ];
 }
 
@@ -203,7 +203,7 @@ function addSummaryAndAverage(table) {
     const summed = (avgCash + avgGain) / 2;
 
     const separator = Array(table[0].length).fill('---');
-    const summaryRow = ['SUMMED AVG RETURN', ${summed.toFixed(1)}%].concat(Array(table[0].length - 2).fill(''));
+    const summaryRow = ['SUMMED AVG RETURN', `${summed.toFixed(1)}%`].concat(Array(table[0].length - 2).fill(''));
 
     return [...table, separator, summaryRow];
 }
@@ -234,13 +234,13 @@ export default async function handler(req, res) {
         let deepITMOnly = false;
 
         if (vixPct >= 150) {
-            vixMessage = VIX ${vixPct.toFixed(2)}% of SMA20 → BW HALT. Park proceeds in VAULT. No new calls.;
+            vixMessage = `VIX ${vixPct.toFixed(2)}% of SMA20 → BW HALT. Park proceeds in VAULT. No new calls.`;
             haltBW = true;
         } else if (vixPct >= 125) {
-            vixMessage = VIX ${vixPct.toFixed(2)}% of SMA20 → HIGH-VOL CAUTION (deep-ITM only);
+            vixMessage = `VIX ${vixPct.toFixed(2)}% of SMA20 → HIGH-VOL CAUTION (deep-ITM only)`;
             deepITMOnly = true;
         } else {
-            vixMessage = VIX ${vixPct.toFixed(2)}% of SMA20 → Market conditions normal;
+            vixMessage = `VIX ${vixPct.toFixed(2)}% of SMA20 → Market conditions normal`;
         }
 
         if (haltBW) {
@@ -272,7 +272,7 @@ export default async function handler(req, res) {
             const exp = await getExp(tkr);
 
             if (spot === null || exp === null) {
-                console.warn(Skipping ${tkr}: Spot or expiration data unavailable.);
+                console.warn(`Skipping ${tkr}: Spot or expiration data unavailable.`);
                 continue;
             }
 
