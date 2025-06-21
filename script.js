@@ -52,19 +52,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             <p><strong>${data.vixStatus}</strong></p>
         `;
 
-        // Show eligible tickers
         if (data.eligible && data.eligible.length > 0) {
             htmlContent += `<h2>Eligible Tickers for BW</h2><p>${data.eligible.join(', ')}</p>`;
         }
 
-        // Use server-supplied drawdownTable directly (no fake SMA math)
+        // USE raw drawdown table directly — do NOT transform
         htmlContent += createTableHtml(
             'BW Ticker Drawdown Check',
             data.drawdownTable || [],
             ['Ticker', 'Current', 'RawHigh', '12W SMA-High', 'Drawdown%', 'Status']
         );
 
-        // Option tables
+        // Options output
         const optHeaders = ['Expiration','Ticker','Spot','Strike','Premium','%OTM/ITM','BW','Yield','Gain','Works'];
         htmlContent += createTableHtml('Closest OTM', data.otm1, optHeaders);
         htmlContent += createTableHtml('2nd Closest OTM', data.otm2, optHeaders);
