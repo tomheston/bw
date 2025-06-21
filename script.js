@@ -3,7 +3,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const errorDiv = document.getElementById('error');
     const resultsDiv = document.getElementById('results');
 
-    // Generic function to generate tables
     function createTableHtml(title, tableData, headers) {
         if (!tableData || tableData.length === 0) {
             return `<h2>${title}</h2><p>No data available.</p>`;
@@ -54,11 +53,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             <p><strong>${data.vixStatus}</strong></p>
         `;
 
-        // Use drawdownTable from API which includes RawHigh and 12W SMA-High
-        // data.drawdownTable rows: [Ticker, Current, RawHigh, SMAHigh, Drawdown%, Status]
+        // Transform drawdownTable to include smoothed high
+        const transformedDraw = data.drawdownTable.map(row => {
+            // row format: [Ticker, Current, RawHigh, Drawdown%, Status]
+            const [ticker, currStr, rawHighStr, drawPrc, status] = row;
+            const curr = parseFloat(currStr);
+            const draw = parseFloat(drawPrc.replace('%',''));
+            const smoothed = curr / (1 - draw / 100);
+            return [ticker, currStr, rawHighStr, smoothed.toFixed(2), drawPrc, status];
+        });
+
+        // Drawdown Table with RawHigh and Smoothed High
         htmlContent += createTableHtml(
             'BW Ticker Drawdown Check',
-            data.drawdownTable,
+            transformedDraw,
             ['Ticker','Current','RawHigh','12W SMA-High','Drawdown%','Status']
         );
 
@@ -72,7 +80,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         htmlContent += createTableHtml('3rd Closest ITM', data.itm3, optHeaders);
 
         resultsDiv.innerHTML = htmlContent;
-
     } catch (error) {
         loadingDiv.style.display = 'none';
         errorDiv.style.display = 'block';
