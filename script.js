@@ -52,8 +52,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             <p><strong>${data.vixStatus}</strong></p>
         `;
 
-        // Drawdown: use backend-provided 6-element rows [tkr, current, rawHigh, smaHigh, drawdown, status]
-        const drawRows = data.drawdownTable || [];
+        // Transform drawdown rows to insert computed 12W SMA-High
+        const drawRowsRaw = data.drawdownTable || [];
+        const drawRows = drawRowsRaw.map(row => {
+            const [ticker, currStr, rawHighStr, drawStr, status] = row;
+            const curr = parseFloat(currStr);
+            const drawPct = parseFloat(drawStr.replace('%', ''));
+            const smaHigh = (curr / (1 - drawPct / 100)).toFixed(2);
+            return [ticker, currStr, rawHighStr, smaHigh, drawStr, status];
+        });
 
         htmlContent += createTableHtml(
             'BW Ticker Drawdown Check',
