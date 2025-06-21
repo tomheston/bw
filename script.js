@@ -53,20 +53,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             <p><strong>${data.vixStatus}</strong></p>
         `;
 
-        // Transform drawdownTable to include smoothed high
-        const transformedDraw = data.drawdownTable.map(row => {
-            // row format: [Ticker, Current, RawHigh, Drawdown%, Status]
-            const [ticker, currStr, rawHighStr, drawPrc, status] = row;
-            const curr = parseFloat(currStr);
-            const draw = parseFloat(drawPrc.replace('%',''));
-            const smoothed = curr / (1 - draw / 100);
-            return [ticker, currStr, rawHighStr, smoothed.toFixed(2), drawPrc, status];
-        });
-
-        // Drawdown Table with RawHigh and Smoothed High
+        // Drawdown Table with backend-provided RawHigh and 12W SMA-High
         htmlContent += createTableHtml(
             'BW Ticker Drawdown Check',
-            transformedDraw,
+            data.drawdownTable,
             ['Ticker','Current','RawHigh','12W SMA-High','Drawdown%','Status']
         );
 
