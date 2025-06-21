@@ -53,10 +53,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             <p><strong>${data.vixStatus}</strong></p>
         `;
 
-        // Drawdown table: data.drawdownTable now includes six fields: [Ticker, Current, RawHigh, SMAHigh, Drawdown%, Status]
+        // Transform drawdownTable to inject 12W SMA-High
+        const drawRows = (data.drawdownTable || []).map(row => {
+            const [ticker, currStr, rawHighStr, drawPctStr, status] = row;
+            const curr    = parseFloat(currStr);
+            const drawPct = parseFloat(drawPctStr.replace('%',''));
+            const smaHigh = (curr / (1 - drawPct / 100)).toFixed(2);
+            return [ticker, currStr, rawHighStr, smaHigh, drawPctStr, status];
+        });
+
+        // Drawdown table with six columns
         htmlContent += createTableHtml(
             'BW Ticker Drawdown Check',
-            data.drawdownTable,
+            drawRows,
             ['Ticker', 'Current', 'RawHigh', '12W SMA-High', 'Drawdown%', 'Status']
         );
 
