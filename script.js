@@ -56,14 +56,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             htmlContent += `<h2>Eligible Tickers for BW</h2><p>${data.eligible.join(', ')}</p>`;
         }
 
-        // USE raw drawdown table directly — do NOT transform
+        // CORRECT: use drawdownTable as-is, full 6-column structure
+        const drawRows = data.drawdownTable || [];
         htmlContent += createTableHtml(
             'BW Ticker Drawdown Check',
-            data.drawdownTable || [],
+            drawRows,
             ['Ticker', 'Current', 'RawHigh', '12W SMA-High', 'Drawdown%', 'Status']
         );
 
-        // Options output
         const optHeaders = ['Expiration','Ticker','Spot','Strike','Premium','%OTM/ITM','BW','Yield','Gain','Works'];
         htmlContent += createTableHtml('Closest OTM', data.otm1, optHeaders);
         htmlContent += createTableHtml('2nd Closest OTM', data.otm2, optHeaders);
