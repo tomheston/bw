@@ -14,14 +14,13 @@ async function makeTradierRequest(endpoint, params) {
         throw new Error("Tradier token is not configured on the server.");
     }
     const url = `${BASE_URL}${endpoint}?${new URLSearchParams(params).toString()}`;
-    console.log(`Fetching from: ${url}`); // For debugging in Vercel logs
     const response = await fetch(url, { headers: HEADERS });
     if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Tradier API error: ${response.status} - ${response.statusText} - ${errorText}`);
     }
     const data = await response.json();
-    await new Promise(resolve => setTimeout(resolve, 100)); // Simulate time.sleep(0.1)
+    await new Promise(resolve => setTimeout(resolve, 100));
     return data;
 }
 
@@ -40,10 +39,7 @@ async function getVixStatus() {
     const days = data?.history?.day || [];
     const closes = days.map(d => d?.close).filter(c => c !== undefined && c !== null);
 
-    if (closes.length < 20) {
-        console.warn("Not enough VIX data points.");
-        return null;
-    }
+    if (closes.length < 20) return null;
 
     const last = closes[closes.length - 1];
     const sma20 = closes.slice(-20).reduce((sum, val) => sum + val, 0) / 20;
@@ -53,7 +49,7 @@ async function getVixStatus() {
 async function getDrawdown(ticker) {
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setDate(endDate.getDate() - 12 * 7);
+    startDate.setDate(endDate.getDate() - 84);
 
     const params = {
         symbol: ticker,
@@ -66,14 +62,11 @@ async function getDrawdown(ticker) {
         const data = await makeTradierRequest('/markets/history', params);
         const days = data?.history?.day || [];
 
-        const closes = days.map(d => d?.close).filter(x => x !== null && x !== undefined);
-        const highs = days.map(d => d?.high).filter(x => x !== null && x !== undefined);
+        const closes = days.map(d => d?.close).filter(Boolean);
+        const highs = days.map(d => d?.high).filter(Boolean);
+        if (closes.length === 0 || highs.length < 5) return [ticker, 'ERROR', '-', '-', '-', 'No data'];
 
-        if (closes.length === 0 || highs.length < 5) {
-            return [ticker, 'ERROR', '-', '-', '-', 'No data'];
-        }
-
-        const currentPrice = closes[closes.length - 1];
+        const current = closes[closes.length - 1];
         const rawHigh = Math.max(...closes);
 
         const sma5Highs = [];
@@ -81,236 +74,137 @@ async function getDrawdown(ticker) {
             const avg = (highs[i - 4] + highs[i - 3] + highs[i - 2] + highs[i - 1] + highs[i]) / 5;
             sma5Highs.push(avg);
         }
+        const smoothedHigh = sma5Highs.length >= 60 ? Math.max(...sma5Highs.slice(-60)) : Math.max(...sma5Highs);
 
-        const smoothedHigh = sma5Highs.length >= 60
-            ? Math.max(...sma5Highs.slice(-60))
-            : Math.max(...sma5Highs);
+        const drawdown = ((smoothedHigh - current) / smoothedHigh) * 100;
+        let status = 'OTM';
+        if (drawdown > 30) status = 'Evaluate Rotation';
+        else if (drawdown >= 20) status = 'Deep ITM';
+        else if (drawdown >= 10) status = 'Hybrid';
 
-        const drawdown = ((smoothedHigh - currentPrice) / smoothedHigh) * 100;
-
-        let status;
-        if (drawdown > 30) {
-            status = 'Evaluate Rotation';
-        } else if (drawdown >= 20) {
-            status = 'Deep ITM';
-        } else if (drawdown >= 10) {
-            status = 'Hybrid';
-        } else {
-            status = 'OTM';
-        }
-
-        return [
-            ticker,
-            parseFloat(currentPrice.toFixed(2)),
-            parseFloat(rawHigh.toFixed(2)),
-            parseFloat(smoothedHigh.toFixed(2)),
-            `${drawdown.toFixed(2)}%`,
-            status
-        ];
-    } catch (error) {
-        console.error(`Error getting drawdown for ${ticker}:`, error);
-        return [ticker, 'ERROR', '-', '-', '-', error.message];
+        return [ticker, parseFloat(current.toFixed(2)), parseFloat(rawHigh.toFixed(2)), parseFloat(smoothedHigh.toFixed(2)), `${drawdown.toFixed(2)}%`, status];
+    } catch (e) {
+        return [ticker, 'ERROR', '-', '-', '-', e.message];
     }
 }
 
-async function getSpot(tkr) {
-    const data = await makeTradierRequest('/markets/quotes', { symbols: tkr });
-    const quote = data?.quotes?.quote;
-    if (Array.isArray(quote)) {
-        return parseFloat(quote[0]?.last);
-    } else if (quote && typeof quote === 'object') {
-        return parseFloat(quote?.last);
-    }
-    return null;
-}
+async function getMomentumOverride(ticker) {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - 10);
 
-async function getExp(tkr) {
-    const data = await makeTradierRequest('/markets/options/expirations', { symbol: tkr });
-    const dates = data?.expirations?.date || [];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const params = {
+        symbol: ticker,
+        interval: 'daily',
+        start: startDate.toISOString().split('T')[0],
+        end: endDate.toISOString().split('T')[0]
+    };
 
-    for (const d of dates) {
-        const dt = new Date(d);
-        dt.setHours(0, 0, 0, 0);
-        const diffDays = (dt.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
-        if (diffDays >= 0 && diffDays <= 7) {
-            return d;
-        }
-    }
-    return null;
+    const data = await makeTradierRequest('/markets/history', params);
+    const days = data?.history?.day || [];
+
+    const closes = days.map(d => d.close).filter(Boolean);
+    const highs = days.map(d => d.high).filter(Boolean);
+    if (closes.length < 1 || highs.length < 5) return false;
+    const lastClose = closes[closes.length - 1];
+    const avgHigh5 = highs.slice(-5).reduce((sum, h) => sum + h, 0) / 5;
+    return lastClose > avgHigh5;
 }
 
 function parseCallRow(c, spot, tkr) {
     const bid = parseFloat(c.bid);
     const ask = parseFloat(c.ask);
     const strike = parseFloat(c.strike);
-
-    if (bid === 0 && ask === 0) {
-        return null;
-    }
+    if (bid === 0 && ask === 0) return null;
 
     const premium = (bid + ask) / 2;
     const cashYield = (premium / spot) * 100;
     const assignedGain = ((strike + premium - spot) / spot) * 100;
-    const bw = spot - premium;
-    const pctMoneyness = ((strike / spot) - 1) * 100;
-    const pctMStr = `${pctMoneyness.toFixed(1)}%`;
+    const pctM = ((strike / spot - 1) * 100).toFixed(1) + '%';
+    const bw = (spot - premium).toFixed(2);
 
-    const meets = (
-        (strike > spot && cashYield >= 2.0) ||
-        (strike < spot && assignedGain >= 1.5)
-    ) ? 'Yes' : 'No';
+    const works = ((strike > spot && cashYield >= 2) || (strike < spot && assignedGain >= 1.5)) ? 'Yes' : 'No';
 
-    return [
-        c.expiration_date, tkr, parseFloat(spot.toFixed(2)), strike,
-        parseFloat(premium.toFixed(2)), pctMStr, parseFloat(bw.toFixed(2)),
-        `${cashYield.toFixed(1)}%`, `${assignedGain.toFixed(1)}%`, meets
-    ];
+    return [c.expiration_date, tkr, parseFloat(spot.toFixed(2)), strike, parseFloat(premium.toFixed(2)), pctM, parseFloat(bw), `${cashYield.toFixed(1)}%`, `${assignedGain.toFixed(1)}%`, works];
 }
 
 async function getTopCalls(tkr, exp, spot) {
     const data = await makeTradierRequest('/markets/options/chains', { symbol: tkr, expiration: exp });
-    const options = data?.options?.option || [];
-    const calls = options.filter(o => o.option_type === 'call');
+    const calls = data?.options?.option?.filter(o => o.option_type === 'call') || [];
 
-    const otm = calls.filter(c => parseFloat(c.strike) > spot)
-                     .sort((a, b) => parseFloat(a.strike) - parseFloat(b.strike))
-                     .slice(0, 3);
-    const itm = calls.filter(c => parseFloat(c.strike) < spot)
-                     .sort((a, b) => Math.abs(parseFloat(a.strike) - spot) - Math.abs(parseFloat(b.strike) - spot))
-                     .slice(0, 3);
+    const otm = calls.filter(c => parseFloat(c.strike) > spot).sort((a, b) => a.strike - b.strike).slice(0, 3);
+    const itm = calls.filter(c => parseFloat(c.strike) < spot).sort((a, b) => Math.abs(a.strike - spot) - Math.abs(b.strike - spot)).slice(0, 3);
 
-    const otmRows = otm.map(c => parseCallRow(c, spot, tkr)).filter(row => row !== null);
-    const itmRows = itm.map(c => parseCallRow(c, spot, tkr)).filter(row => row !== null);
-
-    return { otmRows, itmRows };
+    return {
+        otmRows: otm.map(c => parseCallRow(c, spot, tkr)).filter(Boolean),
+        itmRows: itm.map(c => parseCallRow(c, spot, tkr)).filter(Boolean)
+    };
 }
 
-function addSummaryAndAverage(table) {
-    if (!table || table.length === 0) {
-        return table;
-    }
-    const cashYields = table.map(r => parseFloat(r[7].replace('%', ''))).filter(val => !isNaN(val));
-    const assignedGains = table.map(r => parseFloat(r[8].replace('%', ''))).filter(val => !isNaN(val));
-
-    if (cashYields.length === 0 || assignedGains.length === 0) {
-        return table;
-    }
-
-    const avgCash = cashYields.reduce((sum, val) => sum + val, 0) / cashYields.length;
-    const avgGain = assignedGains.reduce((sum, val) => sum + val, 0) / assignedGains.length;
-    const summed = (avgCash + avgGain) / 2;
-
-    const separator = Array(table[0].length).fill('---');
-    const summaryRow = ['SUMMED AVG RETURN', `${summed.toFixed(1)}%`].concat(Array(table[0].length - 2).fill(''));
-
-    return [...table, separator, summaryRow];
+function summarize(rows) {
+    if (!rows.length) return rows;
+    const yields = rows.map(r => parseFloat(r[7])).filter(x => !isNaN(x));
+    const gains = rows.map(r => parseFloat(r[8])).filter(x => !isNaN(x));
+    const avg = ((yields.reduce((a, b) => a + b, 0) + gains.reduce((a, b) => a + b, 0)) / (yields.length + gains.length)).toFixed(1);
+    return [...rows, Array(rows[0].length).fill('---'), ['SUMMED AVG RETURN', `${avg}%`, ...Array(rows[0].length - 2).fill('')]];
 }
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
-
-    if (req.method !== 'GET') {
-        return res.status(405).json({ error: 'Method Not Allowed' });
-    }
+    if (req.method === 'OPTIONS') return res.status(200).end();
+    if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
 
     const TICKERS = ['BITX', 'FAS', 'MSTX', 'PLTR', 'SOXL', 'SPXL', 'TNA'];
 
     try {
         const vixPct = await getVixStatus();
-        if (vixPct === null) {
-            return res.status(500).json({ error: "VIX data unavailable – aborting BW scan" });
-        }
+        if (vixPct === null) return res.status(500).json({ error: "VIX data unavailable – aborting BW scan" });
 
-        let vixMessage;
-        let haltBW = false;
-        let deepITMOnly = false;
+        let vixMessage = '';
+        let haltBW = false, deepOnly = false;
+        if (vixPct >= 150) { vixMessage = `VIX ${vixPct}% of SMA20 → BW HALT`; haltBW = true; }
+        else if (vixPct >= 125) { vixMessage = `VIX ${vixPct}% of SMA20 → HIGH-VOL CAUTION`; deepOnly = true; }
+        else { vixMessage = `VIX ${vixPct}% of SMA20 → Market conditions normal`; }
 
-        if (vixPct >= 150) {
-            vixMessage = `VIX ${vixPct.toFixed(2)}% of SMA20 → BW HALT. Park proceeds in VAULT. No new calls.`;
-            haltBW = true;
-        } else if (vixPct >= 125) {
-            vixMessage = `VIX ${vixPct.toFixed(2)}% of SMA20 → HIGH-VOL CAUTION (deep-ITM only)`;
-            deepITMOnly = true;
-        } else {
-            vixMessage = `VIX ${vixPct.toFixed(2)}% of SMA20 → Market conditions normal`;
-        }
+        if (haltBW) return res.status(200).json({ vixStatus: vixMessage, halt: true, drawdownTable: [], otm1: [], otm2: [], otm3: [], itm1: [], itm2: [], itm3: [] });
 
-        if (haltBW) {
-            return res.status(200).json({
-                vixStatus: vixMessage,
-                halt: true,
-                drawdownTable: [],
-                otm1: [], otm2: [], otm3: [],
-                itm1: [], itm2: [], itm3: []
-            });
-        }
-
-        const drawdownTable = [];
-        const statusMap = {};
-        for (const ticker of TICKERS) {
-            const dd = await getDrawdown(ticker);
-            drawdownTable.push(dd);
-            if (['OTM', 'Hybrid', 'Deep ITM'].includes(dd[5])) {
-                statusMap[dd[0]] = dd[5];
+        const drawdownTable = [], statusMap = {};
+        for (const tkr of TICKERS) {
+            const row = await getDrawdown(tkr);
+            drawdownTable.push(row);
+            if (["OTM", "Hybrid", "Deep ITM"].includes(row[5])) statusMap[tkr] = row[5];
+            else if (row[5] === "Evaluate Rotation") {
+                const override = await getMomentumOverride(tkr);
+                if (override && vixPct < 140) statusMap[tkr] = row[5];
             }
         }
-        const eligibleTickers = Object.keys(statusMap);
 
-        const otm_1 = [], otm_2 = [], otm_3 = [];
-        const itm_1 = [], itm_2 = [], itm_3 = [];
-
-        for (const tkr of eligibleTickers) {
-            const spot = await getSpot(tkr);
-            const exp = await getExp(tkr);
-
-            if (spot === null || exp === null) {
-                console.warn(`Skipping ${tkr}: Spot or expiration data unavailable.`);
-                continue;
-            }
-
+        const otm1 = [], otm2 = [], otm3 = [], itm1 = [], itm2 = [], itm3 = [];
+        for (const tkr of Object.keys(statusMap)) {
+            const spot = await makeTradierRequest('/markets/quotes', { symbols: tkr }).then(r => parseFloat(r.quotes.quote.last));
+            const exp = await makeTradierRequest('/markets/options/expirations', { symbol: tkr }).then(r => r.expirations.date.find(d => (new Date(d) - new Date()) / (1000 * 60 * 60 * 24) <= 7));
+            if (!spot || !exp) continue;
             const { otmRows, itmRows } = await getTopCalls(tkr, exp, spot);
-
-            if (!deepITMOnly && otmRows.length > 0) {
-                otm_1.push(otmRows[0]);
-                if (otmRows.length > 1) otm_2.push(otmRows[1]);
-                if (otmRows.length > 2) otm_3.push(otmRows[2]);
-            }
-
-            if (itmRows.length > 0) {
-                itm_1.push(itmRows[0]);
-                if (itmRows.length > 1) itm_2.push(itmRows[1]);
-                if (itmRows.length > 2) itm_3.push(itmRows[2]);
-            }
+            if (!deepOnly && otmRows.length) { otm1.push(otmRows[0]); if (otmRows[1]) otm2.push(otmRows[1]); if (otmRows[2]) otm3.push(otmRows[2]); }
+            if (itmRows.length) { itm1.push(itmRows[0]); if (itmRows[1]) itm2.push(itmRows[1]); if (itmRows[2]) itm3.push(itmRows[2]); }
         }
 
-        const headers = ['Expiration', 'Ticker', 'Spot', 'Strike', 'Premium', '%OTM/ITM', 'BW', 'Yield', 'Gain', 'Works'];
-
-        const responseData = {
+        res.status(200).json({
             vixStatus: vixMessage,
-            halt: haltBW,
-            drawdownTable: drawdownTable,
-            otm1: addSummaryAndAverage(otm_1),
-            otm2: addSummaryAndAverage(otm_2),
-            otm3: addSummaryAndAverage(otm_3),
-            itm1: addSummaryAndAverage(itm_1),
-            itm2: addSummaryAndAverage(itm_2),
-            itm3: addSummaryAndAverage(itm_3),
-            headers: headers,
-            runDate: new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' PT'
-        };
-
-        res.status(200).json(responseData);
-
-    } catch (error) {
-        console.error('API Handler Error:', error);
-        res.status(500).json({ error: error.message || 'An unknown error occurred on the server.' });
+            halt: false,
+            drawdownTable,
+            otm1: summarize(otm1),
+            otm2: summarize(otm2),
+            otm3: summarize(otm3),
+            itm1: summarize(itm1),
+            itm2: summarize(itm2),
+            itm3: summarize(itm3),
+            headers: ['Expiration', 'Ticker', 'Spot', 'Strike', 'Premium', '%OTM/ITM', 'BW', 'Yield', 'Gain', 'Works'],
+            runDate: new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }) + ' PT'
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 }
