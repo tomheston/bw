@@ -19,21 +19,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             const isSummaryRow = row[0] === 'SUMMED AVG RETURN';
             const isSeparatorRow = row[0] && row[0].startsWith('---');
 
-            // Determine if this row should be highlighted
-            // The "Works" column is the last element (index 9) in the data array for actual rows
-            const shouldHighlight = !isSummaryRow && !isSeparatorRow && row[9] === 'Yes';
-            const rowClass = shouldHighlight ? 'works-yes-row' : ''; // Add the class if needed
+            // Highlight rows where the "Works" column (last index) is 'Yes'
+            const shouldHighlight = !isSummaryRow && !isSeparatorRow && row[row.length - 1] === 'Yes';
+            const rowClass = shouldHighlight ? 'works-yes-row' : '';
 
             if (isSeparatorRow) {
                 tableHtml += `<tr class="separator-row"><td colspan="${headers.length}"></td></tr>`;
             } else if (isSummaryRow) {
                 tableHtml += `<tr class="summary-row">`;
-                tableHtml += `<td>${row[0]}</td>`; // "SUMMED AVG RETURN"
-                // THIS LINE IS CRUCIAL: It must be purely template literal syntax, no math-inline span tags
-                tableHtml += `<td colspan="${headers.length - 1}">${row[1]}</td>`; // The average value
+                tableHtml += `<td>${row[0]}</td>`;
+                tableHtml += `<td colspan="${headers.length - 1}">${row[1]}</td>`;
                 tableHtml += `</tr>`;
             } else {
-                tableHtml += `<tr class="${rowClass}">`; // Apply the class here
+                tableHtml += `<tr class="${rowClass}">`;
                 row.forEach(cell => {
                     tableHtml += `<td>${cell}</td>`;
                 });
@@ -44,12 +42,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         return tableHtml;
     }
 
-
     try {
-        // Make a request to your Vercel serverless function
-        // In development, this might be http://localhost:3000/api/tradier
-        // In production, Vercel handles the path automatically
-        const response = await fetch('/api/tradier'); // This path maps to your api/tradier.js function
+        const response = await fetch('/api/tradier');
 
         if (!response.ok) {
             const errorData = await response.json();
@@ -58,7 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const data = await response.json();
 
-        loadingDiv.style.display = 'none'; // Hide loading message
+        loadingDiv.style.display = 'none';
 
         if (data.halt) {
             resultsDiv.innerHTML = `<p class="error">${data.vixStatus}</p>`;
@@ -67,23 +61,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         let htmlContent = `
             <p><strong>Run Date (PT):</strong> ${data.runDate}</p>
-            <p><strong>${data.vixStatus}</strong></p>            
+            <p><strong>${data.vixStatus}</strong></p>
         `;
 
-        // Add Drawdown Table
+        // Drawdown Table (updated to match Python fields)
         htmlContent += createTableHtml(
-            "== BW Ticker Drawdown Check ==",
+            "BW Ticker Drawdown Check",
             data.drawdownTable,
-            ["Ticker", "Current", "12W High", "Drawdown %", "Status"]
+            ["Ticker", "Current", "RawHigh", "12W SMA-High", "Drawdown%", "Status"]
         );
 
-        // Add OTM and ITM Tables
-        htmlContent += createTableHtml("== Closest OTM ==", data.otm1, data.headers);
-        htmlContent += createTableHtml("== 2nd Closest OTM ==", data.otm2, data.headers);
-        htmlContent += createTableHtml("== 3rd Closest OTM ==", data.otm3, data.headers);
-        htmlContent += createTableHtml("== Closest ITM ==", data.itm1, data.headers);
-        htmlContent += createTableHtml("== 2nd Closest ITM ==", data.itm2, data.headers);
-        htmlContent += createTableHtml("== 3rd Closest ITM ==", data.itm3, data.headers);
+        // OTM and ITM Tables
+        htmlContent += createTableHtml("Closest OTM", data.otm1, data.headers);
+        htmlContent += createTableHtml("2nd Closest OTM", data.otm2, data.headers);
+        htmlContent += createTableHtml("3rd Closest OTM", data.otm3, data.headers);
+        htmlContent += createTableHtml("Closest ITM", data.itm1, data.headers);
+        htmlContent += createTableHtml("2nd Closest ITM", data.itm2, data.headers);
+        htmlContent += createTableHtml("3rd Closest ITM", data.itm3, data.headers);
 
         resultsDiv.innerHTML = htmlContent;
 
