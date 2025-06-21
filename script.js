@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const errorDiv = document.getElementById('error');
     const resultsDiv = document.getElementById('results');
 
-    // Function to generate tables - DEFINED HERE FOR PROPER SCOPE.
+    // Function to generate tables - DEFINED HERE FOR PROPER SCOPE
     function createTableHtml(title, tableData, headers) {
         if (!tableData || tableData.length === 0) {
             return `<h2>${title}</h2><p>No data available.</p>`;
