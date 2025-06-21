@@ -1,5 +1,5 @@
 // tradier.js
-// Version: Synchronized with Python v4.5.9
+// Version: Synchronized with Python v4.5.9 — includes Evaluate Rotation override logic
 
 import axios from 'axios';
 import dayjs from 'dayjs';
@@ -31,7 +31,7 @@ async function getVixStatus() {
     params,
   });
   const closes = data?.history?.day?.map(d => d.close).filter(Boolean) || [];
-  const last = closes[closes.length - 1];
+  const last = closes.at(-1);
   const sma20 = average(closes.slice(-20));
   return Math.round((last / sma20) * 10000) / 100;
 }
@@ -83,48 +83,6 @@ async function getMomentumOverride(ticker) {
   return lastClose > avgHigh5;
 }
 
-async function getSpot(ticker) {
-  const { data } = await axios.get(`${BASE}/markets/quotes`, {
-    headers: HEADERS,
-    params: { symbols: ticker },
-  });
-  const q = data.quotes.quote;
-  return parseFloat(q.last);
-}
-
-async function getExp(ticker) {
-  const { data } = await axios.get(`${BASE}/markets/options/expirations`, {
-    headers: HEADERS,
-    params: { symbol: ticker },
-  });
-  const dates = data.expirations.date;
-  const next = dates.find(d => dayjs(d).diff(today, 'day') <= 7);
-  return next;
-}
-
-function parseCall(c, spot, tkr) {
-  const bid = parseFloat(c.bid);
-  const ask = parseFloat(c.ask);
-  const strike = parseFloat(c.strike);
-  const premium = (bid + ask) / 2;
-  const cashYield = premium / spot * 100;
-  const assignedGain = ((strike + premium - spot) / spot) * 100;
-  const pctMoneyness = ((strike / spot - 1) * 100).toFixed(1);
-  const works = (strike > spot && cashYield >= 2.0) || (strike < spot && assignedGain >= 1.5) ? 'Yes' : 'No';
-  return [c.expiration_date, tkr, +spot.toFixed(2), strike, +premium.toFixed(2), `${pctMoneyness}%`, +(spot - premium).toFixed(2), `${cashYield.toFixed(1)}%`, `${assignedGain.toFixed(1)}%`, works];
-}
-
-async function getOptions(tkr, exp, spot) {
-  const { data } = await axios.get(`${BASE}/markets/options/chains`, {
-    headers: HEADERS,
-    params: { symbol: tkr, expiration: exp },
-  });
-  const calls = (data.options.option || []).filter(o => o.option_type === 'call');
-  const otm = calls.filter(c => parseFloat(c.strike) > spot).slice(0, 3).map(c => parseCall(c, spot, tkr));
-  const itm = calls.filter(c => parseFloat(c.strike) < spot).sort((a, b) => Math.abs(parseFloat(a.strike) - spot) - Math.abs(parseFloat(b.strike) - spot)).slice(0, 3).map(c => parseCall(c, spot, tkr));
-  return { otm, itm };
-}
-
 export async function run() {
   const vixPct = await getVixStatus();
   console.log(`Drawdown Check\nRun Date (PT): ${dayjs().format('MM/DD/YYYY, hh:mm:ss A')} PT\n`);
@@ -144,5 +102,5 @@ export async function run() {
     }
   }
 
-  return eligible;
+  return { vixPct, drawdowns, eligible };
 }
