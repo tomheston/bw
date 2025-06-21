@@ -47,20 +47,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        // Build Run Info
         let htmlContent = `
             <p><strong>Run Date (PT):</strong> ${data.runDate}</p>
             <p><strong>${data.vixStatus}</strong></p>
         `;
 
-        // Prepare drawdown rows with smoothed 12W SMA-High
-        const drawRows = (data.drawdownTable || []).map(row => {
-            const [ticker, currStr, rawHighStr, drawStr, status] = row;
-            const curr = parseFloat(currStr);
-            const drawPct = parseFloat(drawStr.replace('%', '')) / 100;
-            const smaHigh = (curr / (1 - drawPct)).toFixed(2);
-            return [ticker, currStr, rawHighStr, smaHigh, drawStr, status];
-        });
+        // Drawdown: use backend-provided 6-element rows [tkr, current, rawHigh, smaHigh, drawdown, status]
+        const drawRows = data.drawdownTable || [];
 
         htmlContent += createTableHtml(
             'BW Ticker Drawdown Check',
@@ -68,7 +61,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             ['Ticker', 'Current', 'RawHigh', '12W SMA-High', 'Drawdown%', 'Status']
         );
 
-        // Option tables headers
+        // Option tables
         const optHeaders = ['Expiration','Ticker','Spot','Strike','Premium','%OTM/ITM','BW','Yield','Gain','Works'];
         htmlContent += createTableHtml('Closest OTM', data.otm1, optHeaders);
         htmlContent += createTableHtml('2nd Closest OTM', data.otm2, optHeaders);
