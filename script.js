@@ -47,25 +47,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        // Header info
         let htmlContent = `
             <p><strong>Run Date (PT):</strong> ${data.runDate}</p>
             <p><strong>${data.vixStatus}</strong></p>
         `;
 
-        // Compute smoothed 12W SMA-High for drawdown table
-        const drawRows = (data.drawdownTable || []).map(row => {
-            const [ticker, currStr, rawHighStr, drawPctStr, status] = row;
-            const curr = parseFloat(currStr);
-            const drawPct = parseFloat(drawPctStr.replace('%', ''));
-            const smaHigh = (curr / (1 - drawPct / 100)).toFixed(2);
-            return [ticker, currStr, rawHighStr, smaHigh, drawPctStr, status];
-        });
+        // Show eligible tickers
+        if (data.eligible && data.eligible.length > 0) {
+            htmlContent += `<h2>Eligible Tickers for BW</h2><p>${data.eligible.join(', ')}</p>`;
+        }
 
-        // Drawdown table
+        // Use server-supplied drawdownTable directly (no fake SMA math)
         htmlContent += createTableHtml(
             'BW Ticker Drawdown Check',
-            drawRows,
+            data.drawdownTable || [],
             ['Ticker', 'Current', 'RawHigh', '12W SMA-High', 'Drawdown%', 'Status']
         );
 
