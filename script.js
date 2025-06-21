@@ -8,11 +8,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!tableData || tableData.length === 0) {
             return `<h2>${title}</h2><p>No data available.</p>`;
         }
-
         let tableHtml = `<h2>${title}</h2><table><thead><tr>`;
-        headers.forEach(header => {
-            tableHtml += `<th>${header}</th>`;
-        });
+        headers.forEach(header => tableHtml += `<th>${header}</th>`);
         tableHtml += `</tr></thead><tbody>`;
 
         tableData.forEach(row => {
@@ -27,9 +24,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 tableHtml += `<tr class="summary-row"><td>${row[0]}</td><td colspan="${headers.length - 1}">${row[1]}</td></tr>`;
             } else {
                 tableHtml += `<tr class="${rowClass}">`;
-                row.forEach(cell => {
-                    tableHtml += `<td>${cell}</td>`;
-                });
+                row.forEach(cell => tableHtml += `<td>${cell}</td>`);
                 tableHtml += `</tr>`;
             }
         });
@@ -59,22 +54,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             <p><strong>${data.vixStatus}</strong></p>
         `;
 
-        // Transform drawdownTable to include smoothed high if needed
-        const transformedDrawdown = data.drawdownTable.map(row => {
-            // row: [Ticker, Current, RawHigh, Drawdown%, Status]
-            const [tkr, currStr, rawHighStr, drawdownStr, status] = row;
-            const curr = parseFloat(currStr);
-            const ddPct = parseFloat(drawdownStr.replace('%', '')) / 100;
-            // Calculate smoothed high = curr / (1 - dd)
-            const smoothed = (curr / (1 - ddPct)).toFixed(2);
-            return [tkr, currStr, rawHighStr, smoothed, drawdownStr, status];
-        });
-
-        // Drawdown Table with RawHigh, Smoothed High, Drawdown, Status
+        // Use drawdownTable from API which includes RawHigh and 12W SMA-High
+        // data.drawdownTable rows: [Ticker, Current, RawHigh, SMAHigh, Drawdown%, Status]
         htmlContent += createTableHtml(
             'BW Ticker Drawdown Check',
-            transformedDrawdown,
-            ['Ticker', 'Current', 'RawHigh', '12W SMA-High', 'Drawdown%', 'Status']
+            data.drawdownTable,
+            ['Ticker','Current','RawHigh','12W SMA-High','Drawdown%','Status']
         );
 
         // Option tables headers
