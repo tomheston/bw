@@ -47,22 +47,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        // Header info
         let htmlContent = `
             <p><strong>Run Date (PT):</strong> ${data.runDate}</p>
             <p><strong>${data.vixStatus}</strong></p>
         `;
 
-        // Transform drawdownTable to inject 12W SMA-High
+        // Transform drawdownTable to correctly compute smoothed high
         const drawRows = (data.drawdownTable || []).map(row => {
             const [ticker, currStr, rawHighStr, drawPctStr, status] = row;
-            const curr    = parseFloat(currStr);
+            const curr = parseFloat(currStr);
             const drawPct = parseFloat(drawPctStr.replace('%',''));
             const smaHigh = (curr / (1 - drawPct / 100)).toFixed(2);
             return [ticker, currStr, rawHighStr, smaHigh, drawPctStr, status];
         });
 
-        // Drawdown table with six columns
+        // Drawdown table with computed 12W SMA-High
         htmlContent += createTableHtml(
             'BW Ticker Drawdown Check',
             drawRows,
