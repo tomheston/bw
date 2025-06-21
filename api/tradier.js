@@ -1,126 +1,316 @@
-// tradier.js
-// Version: Synchronized with Python v4.5.9 — includes Evaluate Rotation override logic
+import { URLSearchParams } from 'url'; // Node.js built-in module for URL parameters
 
-import axios from 'axios';
-import dayjs from 'dayjs';
-
-const BASE = 'https://api.tradier.com/v1';
+// --- Config (on the serverless function side) ------------------------
+const TRADIER_TOKEN = process.env.TRADIER_TOKEN; // Accessed from Vercel's env variables
+const BASE_URL = 'https://api.tradier.com/v1';
 const HEADERS = {
-  Authorization: `Bearer ${process.env.TRADIER_TOKEN}`,
-  Accept: 'application/json',
+    'Authorization': Bearer ${TRADIER_TOKEN},
+    'Accept': 'application/json'
 };
 
-const TICKERS = ['BITX', 'FAS', 'MSTX', 'PLTR', 'SOXL', 'SPXL', 'TNA'];
-const VIX_SYMBOL = 'VIX';
-const today = dayjs();
-const startDate = today.subtract(12, 'week');
-
-function average(arr) {
-  return arr.reduce((a, b) => a + b, 0) / arr.length;
+// Helper to make API requests
+async function makeTradierRequest(endpoint, params) {
+    if (!TRADIER_TOKEN) {
+        throw new Error("Tradier token is not configured on the server.");
+    }
+    const url = ${BASE_URL}${endpoint}?${new URLSearchParams(params).toString()};
+    console.log(Fetching from: ${url}); // For debugging in Vercel logs
+    const response = await fetch(url, { headers: HEADERS });
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(Tradier API error: ${response.status} - ${response.statusText} - ${errorText});
+    }
+    const data = await response.json();
+    await new Promise(resolve => setTimeout(resolve, 100)); // Simulate time.sleep(0.1)
+    return data;
 }
 
 async function getVixStatus() {
-  try {
+    const endDate = new Date();
+    const startDateVix = new Date();
+    startDateVix.setDate(endDate.getDate() - 40);
+
     const params = {
-      symbol: VIX_SYMBOL,
-      interval: 'daily',
-      start: today.subtract(40, 'day').format('YYYY-MM-DD'),
-      end: today.format('YYYY-MM-DD'),
+        symbol: 'VIX',
+        interval: 'daily',
+        start: startDateVix.toISOString().split('T')[0],
+        end: endDate.toISOString().split('T')[0]
     };
-    const { data } = await axios.get(`${BASE}/markets/history`, {
-      headers: HEADERS,
-      params,
-    });
-    const closes = data?.history?.day?.map(d => d.close).filter(Boolean) || [];
-    const last = closes.at(-1);
-    const sma20 = average(closes.slice(-20));
-    return Math.round((last / sma20) * 10000) / 100;
-  } catch (err) {
-    console.error('Error fetching VIX:', err.message);
-    return null;
-  }
+    const data = await makeTradierRequest('/markets/history', params);
+    const days = data?.history?.day || [];
+    const closes = days.map(d => d?.close).filter(c => c !== undefined && c !== null);
+
+    if (closes.length < 20) {
+        console.warn("Not enough VIX data points.");
+        return null;
+    }
+
+    const last = closes[closes.length - 1];
+    const sma20 = closes.slice(-20).reduce((sum, val) => sum + val, 0) / 20;
+    return parseFloat(((last / sma20) * 100).toFixed(2));
 }
 
 async function getDrawdown(ticker) {
-  try {
-    const params = {
-      symbol: ticker,
-      interval: 'daily',
-      start: startDate.format('YYYY-MM-DD'),
-      end: today.format('YYYY-MM-DD'),
-    };
-    const { data } = await axios.get(`${BASE}/markets/history`, {
-      headers: HEADERS,
-      params,
-    });
-    const days = data?.history?.day || [];
-    const closes = days.map(d => d.close).filter(Boolean);
-    const highs = days.map(d => d.high).filter(Boolean);
-    const current = closes.at(-1);
-    const rawHigh = Math.max(...closes);
-    const sma5Highs = highs.map((_, i, arr) =>
-      i >= 4 ? average(arr.slice(i - 4, i + 1)) : null
-    ).filter(Boolean);
-    const smoothedHigh = sma5Highs.length >= 60 ? Math.max(...sma5Highs.slice(-60)) : Math.max(...sma5Highs);
-    const dd = Math.round(((smoothedHigh - current) / smoothedHigh) * 10000) / 100;
-    let status = 'OTM';
-    if (dd > 30) status = 'Evaluate Rotation';
-    else if (dd >= 20) status = 'Deep ITM';
-    else if (dd >= 10) status = 'Hybrid';
-    return [ticker, current, rawHigh, smoothedHigh, `${dd.toFixed(2)}%`, status];
-  } catch (err) {
-    console.error(`Drawdown error for ${ticker}:`, err.message);
-    return [ticker, 'ERROR', '-', '-', '-', 'Fetch Failed'];
-  }
-}
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - 12 * 7);
 
-async function getMomentumOverride(ticker) {
-  try {
-    const { data } = await axios.get(`${BASE}/markets/history`, {
-      headers: HEADERS,
-      params: {
+    const params = {
         symbol: ticker,
         interval: 'daily',
-        start: today.subtract(10, 'day').format('YYYY-MM-DD'),
-        end: today.format('YYYY-MM-DD'),
-      },
-    });
-    const days = data?.history?.day || [];
-    const closes = days.map(d => d.close).filter(Boolean);
-    const highs = days.map(d => d.high).filter(Boolean);
-    if (closes.length < 1 || highs.length < 5) return false;
-    const lastClose = closes.at(-1);
-    const avgHigh5 = average(highs.slice(-5));
-    return lastClose > avgHigh5;
-  } catch (err) {
-    console.error(`Momentum override failed for ${ticker}:`, err.message);
-    return false;
-  }
+        start: startDate.toISOString().split('T')[0],
+        end: endDate.toISOString().split('T')[0]
+    };
+
+    try {
+        const data = await makeTradierRequest('/markets/history', params);
+        const days = data?.history?.day || [];
+
+        const closes = days.map(d => d?.close).filter(x => x !== null && x !== undefined);
+        const highs = days.map(d => d?.high).filter(x => x !== null && x !== undefined);
+
+        if (closes.length === 0 || highs.length < 5) {
+            return [ticker, 'ERROR', '-', '-', '-', 'No data'];
+        }
+
+        const currentPrice = closes[closes.length - 1];
+        const rawHigh = Math.max(...closes);
+
+        const sma5Highs = [];
+        for (let i = 4; i < highs.length; i++) {
+            const avg = (highs[i - 4] + highs[i - 3] + highs[i - 2] + highs[i - 1] + highs[i]) / 5;
+            sma5Highs.push(avg);
+        }
+
+        const smoothedHigh = sma5Highs.length >= 60
+            ? Math.max(...sma5Highs.slice(-60))
+            : Math.max(...sma5Highs);
+
+        const drawdown = ((smoothedHigh - currentPrice) / smoothedHigh) * 100;
+
+        let status;
+        if (drawdown > 30) {
+            status = 'Evaluate Rotation';
+        } else if (drawdown >= 20) {
+            status = 'Deep ITM';
+        } else if (drawdown >= 10) {
+            status = 'Hybrid';
+        } else {
+            status = 'OTM';
+        }
+
+        return [
+            ticker,
+            parseFloat(currentPrice.toFixed(2)),
+            parseFloat(rawHigh.toFixed(2)),
+            parseFloat(smoothedHigh.toFixed(2)),
+            ${drawdown.toFixed(2)}%,
+            status
+        ];
+    } catch (error) {
+        console.error(Error getting drawdown for ${ticker}:, error);
+        return [ticker, 'ERROR', '-', '-', '-', error.message];
+    }
 }
 
-export async function run() {
-  const vixPct = await getVixStatus();
-  if (!vixPct) {
-    console.error('Aborting due to VIX fetch failure');
-    return;
-  }
-
-  console.log(`Drawdown Check\nRun Date (PT): ${dayjs().format('MM/DD/YYYY, hh:mm:ss A')} PT\n`);
-  console.log(`VIX ${vixPct}% of SMA20 → ${vixPct >= 150 ? 'BW HALT. No new calls.' : vixPct >= 125 ? 'HIGH-VOL CAUTION (deep‑ITM only)' : 'Market conditions normal'}\n`);
-
-  const drawdowns = await Promise.all(TICKERS.map(getDrawdown));
-  drawdowns.forEach(dd => console.log(`${dd.join('\t')}`));
-
-  const eligible = [];
-  for (let dd of drawdowns) {
-    const [tkr, , , , , status] = dd;
-    if (status === 'Evaluate Rotation') {
-      const momentum = await getMomentumOverride(tkr);
-      if (momentum && vixPct < 140) eligible.push(tkr);
-    } else if (status !== 'Fetch Failed') {
-      eligible.push(tkr);
+async function getSpot(tkr) {
+    const data = await makeTradierRequest('/markets/quotes', { symbols: tkr });
+    const quote = data?.quotes?.quote;
+    if (Array.isArray(quote)) {
+        return parseFloat(quote[0]?.last);
+    } else if (quote && typeof quote === 'object') {
+        return parseFloat(quote?.last);
     }
-  }
+    return null;
+}
 
-  return { vixPct, drawdowns, eligible };
+async function getExp(tkr) {
+    const data = await makeTradierRequest('/markets/options/expirations', { symbol: tkr });
+    const dates = data?.expirations?.date || [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (const d of dates) {
+        const dt = new Date(d);
+        dt.setHours(0, 0, 0, 0);
+        const diffDays = (dt.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
+        if (diffDays >= 0 && diffDays <= 7) {
+            return d;
+        }
+    }
+    return null;
+}
+
+function parseCallRow(c, spot, tkr) {
+    const bid = parseFloat(c.bid);
+    const ask = parseFloat(c.ask);
+    const strike = parseFloat(c.strike);
+
+    if (bid === 0 && ask === 0) {
+        return null;
+    }
+
+    const premium = (bid + ask) / 2;
+    const cashYield = (premium / spot) * 100;
+    const assignedGain = ((strike + premium - spot) / spot) * 100;
+    const bw = spot - premium;
+    const pctMoneyness = ((strike / spot) - 1) * 100;
+    const pctMStr = ${pctMoneyness.toFixed(1)}%;
+
+    const meets = (
+        (strike > spot && cashYield >= 2.0) ||
+        (strike < spot && assignedGain >= 1.5)
+    ) ? 'Yes' : 'No';
+
+    return [
+        c.expiration_date, tkr, parseFloat(spot.toFixed(2)), strike,
+        parseFloat(premium.toFixed(2)), pctMStr, parseFloat(bw.toFixed(2)),
+        ${cashYield.toFixed(1)}%, ${assignedGain.toFixed(1)}%, meets
+    ];
+}
+
+async function getTopCalls(tkr, exp, spot) {
+    const data = await makeTradierRequest('/markets/options/chains', { symbol: tkr, expiration: exp });
+    const options = data?.options?.option || [];
+    const calls = options.filter(o => o.option_type === 'call');
+
+    const otm = calls.filter(c => parseFloat(c.strike) > spot)
+                     .sort((a, b) => parseFloat(a.strike) - parseFloat(b.strike))
+                     .slice(0, 3);
+    const itm = calls.filter(c => parseFloat(c.strike) < spot)
+                     .sort((a, b) => Math.abs(parseFloat(a.strike) - spot) - Math.abs(parseFloat(b.strike) - spot))
+                     .slice(0, 3);
+
+    const otmRows = otm.map(c => parseCallRow(c, spot, tkr)).filter(row => row !== null);
+    const itmRows = itm.map(c => parseCallRow(c, spot, tkr)).filter(row => row !== null);
+
+    return { otmRows, itmRows };
+}
+
+function addSummaryAndAverage(table) {
+    if (!table || table.length === 0) {
+        return table;
+    }
+    const cashYields = table.map(r => parseFloat(r[7].replace('%', ''))).filter(val => !isNaN(val));
+    const assignedGains = table.map(r => parseFloat(r[8].replace('%', ''))).filter(val => !isNaN(val));
+
+    if (cashYields.length === 0 || assignedGains.length === 0) {
+        return table;
+    }
+
+    const avgCash = cashYields.reduce((sum, val) => sum + val, 0) / cashYields.length;
+    const avgGain = assignedGains.reduce((sum, val) => sum + val, 0) / assignedGains.length;
+    const summed = (avgCash + avgGain) / 2;
+
+    const separator = Array(table[0].length).fill('---');
+    const summaryRow = ['SUMMED AVG RETURN', ${summed.toFixed(1)}%].concat(Array(table[0].length - 2).fill(''));
+
+    return [...table, separator, summaryRow];
+}
+
+export default async function handler(req, res) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+
+    if (req.method !== 'GET') {
+        return res.status(405).json({ error: 'Method Not Allowed' });
+    }
+
+    const TICKERS = ['BITX', 'FAS', 'MSTX', 'PLTR', 'SOXL', 'SPXL', 'TNA'];
+
+    try {
+        const vixPct = await getVixStatus();
+        if (vixPct === null) {
+            return res.status(500).json({ error: "VIX data unavailable – aborting BW scan" });
+        }
+
+        let vixMessage;
+        let haltBW = false;
+        let deepITMOnly = false;
+
+        if (vixPct >= 150) {
+            vixMessage = VIX ${vixPct.toFixed(2)}% of SMA20 → BW HALT. Park proceeds in VAULT. No new calls.;
+            haltBW = true;
+        } else if (vixPct >= 125) {
+            vixMessage = VIX ${vixPct.toFixed(2)}% of SMA20 → HIGH-VOL CAUTION (deep-ITM only);
+            deepITMOnly = true;
+        } else {
+            vixMessage = VIX ${vixPct.toFixed(2)}% of SMA20 → Market conditions normal;
+        }
+
+        if (haltBW) {
+            return res.status(200).json({
+                vixStatus: vixMessage,
+                halt: true,
+                drawdownTable: [],
+                otm1: [], otm2: [], otm3: [],
+                itm1: [], itm2: [], itm3: []
+            });
+        }
+
+        const drawdownTable = [];
+        const statusMap = {};
+        for (const ticker of TICKERS) {
+            const dd = await getDrawdown(ticker);
+            drawdownTable.push(dd);
+            if (['OTM', 'Hybrid', 'Deep ITM'].includes(dd[5])) {
+                statusMap[dd[0]] = dd[5];
+            }
+        }
+        const eligibleTickers = Object.keys(statusMap);
+
+        const otm_1 = [], otm_2 = [], otm_3 = [];
+        const itm_1 = [], itm_2 = [], itm_3 = [];
+
+        for (const tkr of eligibleTickers) {
+            const spot = await getSpot(tkr);
+            const exp = await getExp(tkr);
+
+            if (spot === null || exp === null) {
+                console.warn(Skipping ${tkr}: Spot or expiration data unavailable.);
+                continue;
+            }
+
+            const { otmRows, itmRows } = await getTopCalls(tkr, exp, spot);
+
+            if (!deepITMOnly && otmRows.length > 0) {
+                otm_1.push(otmRows[0]);
+                if (otmRows.length > 1) otm_2.push(otmRows[1]);
+                if (otmRows.length > 2) otm_3.push(otmRows[2]);
+            }
+
+            if (itmRows.length > 0) {
+                itm_1.push(itmRows[0]);
+                if (itmRows.length > 1) itm_2.push(itmRows[1]);
+                if (itmRows.length > 2) itm_3.push(itmRows[2]);
+            }
+        }
+
+        const headers = ['Expiration', 'Ticker', 'Spot', 'Strike', 'Premium', '%OTM/ITM', 'BW', 'Yield', 'Gain', 'Works'];
+
+        const responseData = {
+            vixStatus: vixMessage,
+            halt: haltBW,
+            drawdownTable: drawdownTable,
+            otm1: addSummaryAndAverage(otm_1),
+            otm2: addSummaryAndAverage(otm_2),
+            otm3: addSummaryAndAverage(otm_3),
+            itm1: addSummaryAndAverage(itm_1),
+            itm2: addSummaryAndAverage(itm_2),
+            itm3: addSummaryAndAverage(itm_3),
+            headers: headers,
+            runDate: new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' PT'
+        };
+
+        res.status(200).json(responseData);
+
+    } catch (error) {
+        console.error('API Handler Error:', error);
+        res.status(500).json({ error: error.message || 'An unknown error occurred on the server.' });
+    }
 }
