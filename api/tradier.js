@@ -63,25 +63,36 @@ async function getDrawdown(ticker) {
         start: startDate.toISOString().split('T')[0],
         end: endDate.toISOString().split('T')[0]
     };
+
     try {
         const data = await makeTradierRequest('/markets/history', params);
-        if (!data || !data.history || !data.history.day) {
-            return [ticker, 'ERROR', '-', '-', 'No data'];
-        }
-        const closes = data.history.day.map(d => ({ price: d.close, date: d.date }))
-                             .filter(d => d.price !== undefined && d.price !== null);
+        const days = data?.history?.day || [];
 
-        if (closes.length === 0) {
-            return [ticker, 'ERROR', '-', '-', 'No prices'];
+        const closes = days.map(d => d?.close).filter(x => x !== null && x !== undefined);
+        const highs = days.map(d => d?.high).filter(x => x !== null && x !== undefined);
+
+        if (closes.length === 0 || highs.length < 5) {
+            return [ticker, 'ERROR', '-', '-', '-', 'No data'];
         }
 
-        const currentPrice = closes[closes.length - 1].price;
-        const highPrice = Math.max(...closes.map(d => d.price));
-        const drawdown = parseFloat((((highPrice - currentPrice) / highPrice) * 100).toFixed(2));
+        const currentPrice = closes[closes.length - 1];
+        const rawHigh = Math.max(...closes);
+
+        const sma5Highs = [];
+        for (let i = 4; i < highs.length; i++) {
+            const avg = (highs[i - 4] + highs[i - 3] + highs[i - 2] + highs[i - 1] + highs[i]) / 5;
+            sma5Highs.push(avg);
+        }
+
+        const smoothedHigh = sma5Highs.length >= 60
+            ? Math.max(...sma5Highs.slice(-60))
+            : Math.max(...sma5Highs);
+
+        const drawdown = ((smoothedHigh - currentPrice) / smoothedHigh) * 100;
 
         let status;
         if (drawdown > 30) {
-            status = 'Stop Calls';
+            status = 'Evaluate Rotation';
         } else if (drawdown >= 20) {
             status = 'Deep ITM';
         } else if (drawdown >= 10) {
@@ -89,10 +100,18 @@ async function getDrawdown(ticker) {
         } else {
             status = 'OTM';
         }
-        return [ticker, parseFloat(currentPrice.toFixed(2)), parseFloat(highPrice.toFixed(2)), `${drawdown.toFixed(2)}%`, status];
+
+        return [
+            ticker,
+            parseFloat(currentPrice.toFixed(2)),
+            parseFloat(rawHigh.toFixed(2)),
+            parseFloat(smoothedHigh.toFixed(2)),
+            `${drawdown.toFixed(2)}%`,
+            status
+        ];
     } catch (error) {
         console.error(`Error getting drawdown for ${ticker}:`, error);
-        return [ticker, 'ERROR', '-', '-', error.message];
+        return [ticker, 'ERROR', '-', '-', '-', error.message];
     }
 }
 
