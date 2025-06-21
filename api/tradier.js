@@ -25,7 +25,6 @@ async function makeTradierRequest(endpoint, params) {
     return data;
 }
 
-// Python's get_vix_status translated
 async function getVixStatus() {
     const endDate = new Date();
     const startDateVix = new Date();
@@ -51,11 +50,10 @@ async function getVixStatus() {
     return parseFloat(((last / sma20) * 100).toFixed(2));
 }
 
-// Python's get_drawdown translated
 async function getDrawdown(ticker) {
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setDate(endDate.getDate() - 12 * 7); // 12 weeks
+    startDate.setDate(endDate.getDate() - 12 * 7);
 
     const params = {
         symbol: ticker,
@@ -115,7 +113,6 @@ async function getDrawdown(ticker) {
     }
 }
 
-// Python's get_spot translated
 async function getSpot(tkr) {
     const data = await makeTradierRequest('/markets/quotes', { symbols: tkr });
     const quote = data?.quotes?.quote;
@@ -127,16 +124,15 @@ async function getSpot(tkr) {
     return null;
 }
 
-// Python's get_exp translated
 async function getExp(tkr) {
     const data = await makeTradierRequest('/markets/options/expirations', { symbol: tkr });
     const dates = data?.expirations?.date || [];
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Normalize to start of day
+    today.setHours(0, 0, 0, 0);
 
     for (const d of dates) {
         const dt = new Date(d);
-        dt.setHours(0, 0, 0, 0); // Normalize to start of day
+        dt.setHours(0, 0, 0, 0);
         const diffDays = (dt.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
         if (diffDays >= 0 && diffDays <= 7) {
             return d;
@@ -145,7 +141,6 @@ async function getExp(tkr) {
     return null;
 }
 
-// Python's parse_call_row translated
 function parseCallRow(c, spot, tkr) {
     const bid = parseFloat(c.bid);
     const ask = parseFloat(c.ask);
@@ -174,7 +169,6 @@ function parseCallRow(c, spot, tkr) {
     ];
 }
 
-// Python's get_top_calls translated
 async function getTopCalls(tkr, exp, spot) {
     const data = await makeTradierRequest('/markets/options/chains', { symbol: tkr, expiration: exp });
     const options = data?.options?.option || [];
@@ -208,21 +202,17 @@ function addSummaryAndAverage(table) {
     const avgGain = assignedGains.reduce((sum, val) => sum + val, 0) / assignedGains.length;
     const summed = (avgCash + avgGain) / 2;
 
-    // Create a separator row (adjust based on number of columns)
     const separator = Array(table[0].length).fill('---');
     const summaryRow = ['SUMMED AVG RETURN', `${summed.toFixed(1)}%`].concat(Array(table[0].length - 2).fill(''));
 
     return [...table, separator, summaryRow];
 }
 
-// This is the main handler for your Vercel serverless function
 export default async function handler(req, res) {
-    // Set CORS headers for security and to allow your HTML page to access this function
-    res.setHeader('Access-Control-Allow-Origin', '*'); // Adjust to your frontend domain in production
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    // Handle preflight requests
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
     }
@@ -231,11 +221,9 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
-    // --- Original Python Config ---
     const TICKERS = ['BITX', 'FAS', 'MSTX', 'PLTR', 'SOXL', 'SPXL', 'TNA'];
 
     try {
-        // --- VIX circuit-breaker (run FIRST) ------------------------
         const vixPct = await getVixStatus();
         if (vixPct === null) {
             return res.status(500).json({ error: "VIX data unavailable – aborting BW scan" });
@@ -265,14 +253,13 @@ export default async function handler(req, res) {
             });
         }
 
-        // --- Main BW scan ------------------------------------------
         const drawdownTable = [];
         const statusMap = {};
         for (const ticker of TICKERS) {
             const dd = await getDrawdown(ticker);
             drawdownTable.push(dd);
-            if (['OTM', 'Hybrid', 'Deep ITM'].includes(dd[4])) {
-                statusMap[dd[0]] = dd[4];
+            if (['OTM', 'Hybrid', 'Deep ITM'].includes(dd[5])) {
+                statusMap[dd[0]] = dd[5];
             }
         }
         const eligibleTickers = Object.keys(statusMap);
@@ -291,14 +278,12 @@ export default async function handler(req, res) {
 
             const { otmRows, itmRows } = await getTopCalls(tkr, exp, spot);
 
-            // Apply caution-zone filter (only deep-ITM in caution zone)
-            if (!deepITMOnly && otmRows.length > 0) { // If not in caution zone, include OTM
+            if (!deepITMOnly && otmRows.length > 0) {
                 otm_1.push(otmRows[0]);
                 if (otmRows.length > 1) otm_2.push(otmRows[1]);
                 if (otmRows.length > 2) otm_3.push(otmRows[2]);
             }
 
-            // Always include ITM if available
             if (itmRows.length > 0) {
                 itm_1.push(itmRows[0]);
                 if (itmRows.length > 1) itm_2.push(itmRows[1]);
@@ -308,7 +293,6 @@ export default async function handler(req, res) {
 
         const headers = ['Expiration', 'Ticker', 'Spot', 'Strike', 'Premium', '%OTM/ITM', 'BW', 'Yield', 'Gain', 'Works'];
 
-        // Prepare data for the frontend
         const responseData = {
             vixStatus: vixMessage,
             halt: haltBW,
