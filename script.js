@@ -47,21 +47,22 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
+        // Header info
         let htmlContent = `
             <p><strong>Run Date (PT):</strong> ${data.runDate}</p>
             <p><strong>${data.vixStatus}</strong></p>
         `;
 
-        // Transform drawdown rows to insert computed 12W SMA-High
-        const drawRowsRaw = data.drawdownTable || [];
-        const drawRows = drawRowsRaw.map(row => {
-            const [ticker, currStr, rawHighStr, drawStr, status] = row;
+        // Transform drawdownTable to include computed 12W SMA-High
+        const drawRows = (data.drawdownTable || []).map(row => {
+            const [ticker, currStr, rawHighStr, drawPctStr, status] = row;
             const curr = parseFloat(currStr);
-            const drawPct = parseFloat(drawStr.replace('%', ''));
+            const drawPct = parseFloat(drawPctStr.replace('%',''));
             const smaHigh = (curr / (1 - drawPct / 100)).toFixed(2);
-            return [ticker, currStr, rawHighStr, smaHigh, drawStr, status];
+            return [ticker, currStr, rawHighStr, smaHigh, drawPctStr, status];
         });
 
+        // Drawdown table
         htmlContent += createTableHtml(
             'BW Ticker Drawdown Check',
             drawRows,
@@ -81,7 +82,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (error) {
         loadingDiv.style.display = 'none';
         errorDiv.style.display = 'block';
-        errorDiv.textContent = `Error fetching data: ${error.message}. Please check console for details.`;
+        errorDiv.textContent = `Error fetching data: ${error.message}`;
         console.error('Frontend Error:', error);
     }
 });
